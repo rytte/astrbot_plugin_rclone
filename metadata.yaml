@@ -1,0 +1,6 @@
+name: astrbot_plugin_rclone
+display_name: 云端同步
+desc: 通过 rclone 在本机与多种云存储之间执行上传更新、云端镜像、下载更新和本地镜像，提供动态连接配置、官方 GUI 和同步管理页面。
+version: 0.5.0
+author: rytte
+astrbot_version: ">=4.27.4,<5"
