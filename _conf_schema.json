@@ -1,0 +1,9 @@
+{
+  "logo": {
+    "description": "插件页面 Logo",
+    "type": "string",
+    "options": ["logo.png", "logo2.png", "logo3.png", "logo4.png"],
+    "default": "logo.png",
+    "hint": "选择插件 logos 目录中的图片文件名。修改后重载插件并刷新云端同步页面生效。"
+  }
+}

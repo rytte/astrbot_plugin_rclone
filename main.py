@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import functools
 import hmac
 import secrets
@@ -9,6 +10,7 @@ import time
 from pathlib import Path
 
 import jwt
+from astrbot.api import AstrBotConfig
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.api.web import (
     error_response,
@@ -22,6 +24,25 @@ from .files import SyncError, check_keys
 from .service import SyncService
 
 PLUGIN_NAME = "astrbot_plugin_rclone"
+LOGOS_DIR = Path(__file__).resolve().parent / "logos"
+LOGO_NAMES = ("logo.png", "logo2.png", "logo3.png", "logo4.png")
+
+
+def load_logo(name):
+    if not isinstance(name, str) or name not in LOGO_NAMES:
+        raise SyncError(
+            "logo 必须是 logos 目录中的以下文件名之一：" + "、".join(LOGO_NAMES)
+        )
+    try:
+        data = (LOGOS_DIR / name).read_bytes()
+    except OSError:
+        raise SyncError(f"无法读取 logos/{name}，请检查图片文件及读取权限。") from None
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise SyncError(f"logos/{name} 不是有效的 PNG 图片。")
+    return {
+        "name": name,
+        "src": "data:image/png;base64," + base64.b64encode(data).decode("ascii"),
+    }
 
 
 def json_response(data):
@@ -31,8 +52,9 @@ def json_response(data):
 class RclonePlugin(Star):
     """Provide a native page and authenticated four-mode transfer management."""
 
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
+        self.page_logo = load_logo(config.get("logo"))
         self.sync = SyncService(
             Path(get_astrbot_root()), StarTools.get_data_dir(PLUGIN_NAME)
         )
@@ -44,6 +66,7 @@ class RclonePlugin(Star):
         await self.sync.initialize()
         for action, method in {
             "state": "GET",
+            "logo": "GET",
             "connection": "POST",
             "connect": "POST",
             "disconnect": "POST",
@@ -130,6 +153,8 @@ class RclonePlugin(Star):
                 }
             else:
                 payload = {}
+            if action == "logo":
+                return json_response(self.page_logo)
             if action == "state":
                 return json_response(
                     {

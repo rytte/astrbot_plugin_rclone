@@ -1,5 +1,5 @@
+import base64
 import json
-import logging
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,21 +12,27 @@ SECRET = "onedrive-test-signing-secret-32-bytes"
 
 
 @pytest.fixture
-async def page_plugin(tmp_path):
+async def page_plugin(tmp_path, monkeypatch, request):
+    from astrbot.api import AstrBotConfig
     from astrbot.core.star.context import Context
-    from astrbot_plugin_rclone.main import RclonePlugin
-    from astrbot_plugin_rclone.service import SyncService
+    from astrbot_plugin_rclone import main
 
     context = Context.__new__(Context)
     context.registered_web_apis = []
     context.get_config = lambda: {"dashboard": {"jwt_secret": SECRET}}
-    plugin = RclonePlugin.__new__(RclonePlugin)
-    plugin.context = context
-    plugin.sync = SyncService(tmp_path, tmp_path / "private")
-    plugin.handlers = []
-    plugin.nonces = {}
-    plugin.closed = False
-    plugin.logger = logging.getLogger("onedrive-tests")
+    monkeypatch.setattr(main, "get_astrbot_root", lambda: str(tmp_path))
+    monkeypatch.setattr(main.StarTools, "get_data_dir", lambda _: tmp_path / "private")
+    config_path = tmp_path / "astrbot_plugin_rclone_config.json"
+    config_path.write_text(
+        json.dumps({"logo": getattr(request, "param", "logo.png")}), encoding="utf-8"
+    )
+    schema = json.loads(
+        (Path(__file__).resolve().parents[1] / "_conf_schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    config = AstrBotConfig(config_path=str(config_path), schema=schema)
+    plugin = main.RclonePlugin(context, config)
     await plugin.initialize()
     yield plugin
     await plugin.terminate()
@@ -71,7 +77,7 @@ async def test_native_routes_require_dashboard_jwt_and_csrf(page_plugin):
     code, state = await call(page_plugin, "state")
     assert code == 200 and state["csrf"]
     assert "tokens" not in state
-    assert len(page_plugin.context.registered_web_apis) == 18
+    assert len(page_plugin.context.registered_web_apis) == 19
     code, result = await call(
         page_plugin,
         "connection",
@@ -123,6 +129,47 @@ async def test_unknown_fields_are_not_ignored(page_plugin):
     assert code == 400 and "未知字段" in result["message"]
 
 
+@pytest.mark.parametrize(
+    "page_plugin", ["logo.png", "logo2.png", "logo3.png", "logo4.png"], indirect=True
+)
+async def test_logo_route_uses_file_selected_in_plugin_config(page_plugin):
+    from astrbot_plugin_rclone.main import LOGOS_DIR
+
+    name = json.loads(
+        (page_plugin.sync.root / "astrbot_plugin_rclone_config.json").read_text(
+            encoding="utf-8"
+        )
+    )["logo"]
+    code, result = await call(page_plugin, "logo")
+    assert code == 200 and result["name"] == name
+    assert result["src"].startswith("data:image/png;base64,")
+    assert (
+        base64.b64decode(result["src"].split(",", 1)[1])
+        == (LOGOS_DIR / name).read_bytes()
+    )
+
+
+@pytest.mark.parametrize("name", ["../logo.png", "logo5.png", "", None, 3])
+def test_logo_rejects_invalid_config_without_defaulting(name):
+    from astrbot_plugin_rclone.files import SyncError
+    from astrbot_plugin_rclone.main import load_logo
+
+    with pytest.raises(SyncError, match="logo 必须是"):
+        load_logo(name)
+
+
+@pytest.mark.parametrize("content", [None, b"not a PNG"])
+def test_logo_reports_missing_or_invalid_image(tmp_path, monkeypatch, content):
+    from astrbot_plugin_rclone import main
+    from astrbot_plugin_rclone.files import SyncError
+
+    monkeypatch.setattr(main, "LOGOS_DIR", tmp_path)
+    if content is not None:
+        (tmp_path / "logo.png").write_bytes(content)
+    with pytest.raises(SyncError, match="无法读取|不是有效的 PNG"):
+        main.load_logo("logo.png")
+
+
 async def test_page_is_discovered_by_real_astrbot_page_service():
     from astrbot.core.star.star_manager import PluginManager
     from astrbot.dashboard.services.plugin_page_service import PluginPageService
@@ -171,7 +218,7 @@ async def test_setup_actions_reject_arbitrary_commands(page_plugin, action):
     assert not page_plugin.sync.configuration.active
 
 
-@pytest.mark.parametrize("action", ["providers", "remotes"])
+@pytest.mark.parametrize("action", ["providers", "remotes", "logo"])
 async def test_configuration_reads_reject_asset_tokens(page_plugin, action):
     code, _ = await call(
         page_plugin, action, token_fields={"token_type": "plugin_page_asset"}

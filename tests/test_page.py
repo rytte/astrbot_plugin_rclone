@@ -1,5 +1,6 @@
 """Exercise the page inside AstrBot's sandbox with the real bridge SDK."""
 
+import base64
 import json
 import mimetypes
 import subprocess
@@ -122,7 +123,16 @@ def browser_page():
             posts.append((action, payload))
             assert payload.pop("csrf") == "test-csrf"
         result = {"saved": True}
-        if action == "providers":
+        if action == "logo":
+            name = state.get("logo_name", "logo.png")
+            result = {
+                "name": name,
+                "src": "data:image/png;base64,"
+                + base64.b64encode((PLUGIN / "logos" / name).read_bytes()).decode(
+                    "ascii"
+                ),
+            }
+        elif action == "providers":
             result = {"providers": state.get("provider_catalog", providers)}
         elif action == "remotes":
             result = {"remotes": remotes}
@@ -270,6 +280,38 @@ def browser_page():
         yield page, frame, state, posts
         assert not errors
         browser.close()
+
+
+@pytest.mark.parametrize("name", ["logo.png", "logo2.png", "logo3.png", "logo4.png"])
+def test_page_displays_configured_logo(browser_page, name):
+    page, frame, state, posts = browser_page
+    state["logo_name"] = name
+    page.reload()
+    logo = frame.locator("#page-logo")
+    playwright.expect(logo).to_be_visible()
+    expected = "data:image/png;base64," + base64.b64encode(
+        (PLUGIN / "logos" / name).read_bytes()
+    ).decode("ascii")
+    assert logo.get_attribute("src") == expected
+    assert logo.evaluate("image => image.complete && image.naturalWidth > 0")
+
+
+def test_page_reports_logo_decode_failure(browser_page):
+    page, frame, state, posts = browser_page
+    page.route(
+        "http://backup.test/api/logo",
+        lambda route: route.fulfill(
+            body=json.dumps(
+                {"name": "logo3.png", "src": "data:image/png;base64,broken"}
+            ),
+            content_type="application/json",
+        ),
+    )
+    page.reload()
+    playwright.expect(frame.locator("#boot-error")).to_contain_text(
+        "无法显示 Logo logo3.png"
+    )
+    playwright.expect(frame.locator("#page-logo")).not_to_be_visible()
 
 
 def test_page_creates_previews_edits_and_removes_tasks(browser_page):

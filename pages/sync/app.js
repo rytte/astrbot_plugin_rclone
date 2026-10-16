@@ -276,6 +276,11 @@ async function initialize() {
     if (!bridge || typeof bridge.ready !== "function") throw new Error("请从 AstrBot WebUI 的插件详情 → 云端同步页面打开。当前环境缺少官方插件页面 bridge。");
     await bridge.ready();
     bridge.onContext(context => { document.documentElement.dataset.theme = context.isDark ? "dark" : "light"; });
+    const logo = await bridge.apiGet("logo");
+    elements["page-logo"].src = logo.src;
+    try { await elements["page-logo"].decode(); }
+    catch { throw new Error(`无法显示 Logo ${logo.name}，请检查 logos 目录中的图片。`); }
+    elements["page-logo"].hidden = false;
     await loadState(); bindEvents();
     pollTimer = window.setInterval(async () => {
       if (polling || requesting || document.hidden) return;

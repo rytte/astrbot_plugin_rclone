@@ -20,6 +20,20 @@ rclone 是外部可执行程序，插件安装包和 pip 不包含它。点击�
 
 在插件详情打开「云端同步」。管理接口仅接受 WebUI 登录 JWT 和用户绑定的操作凭据，不接受 API Key 或页面资源令牌。
 
+## 更换页面 Logo
+
+四款内置图片位于插件目录的 `logos/` 下：`logo.png`、`logo2.png`、`logo3.png`、`logo4.png`。
+
+在 AstrBot 的本插件配置中修改 `logo`，或编辑 AstrBot 数据目录下的 `config/astrbot_plugin_rclone_config.json`，例如：
+
+```json
+{
+  "logo": "logo3.png"
+}
+```
+
+默认使用 `logo.png`。保存后重载插件，再刷新「云端同步」页面生效，所有访问者共用该选择。配置只填写文件名，不填写路径；文件名不受支持、文件缺失或格式错误会明确报错。此设置控制页面左上角的 Logo。
+
 ## 配置存储连接
 
 1. 填写 rclone 程序位置，点击「保存连接设置」。
