@@ -105,10 +105,10 @@ def browser_page():
             )
         if path.startswith("/page/"):
             file = PLUGIN / "pages" / "sync" / path.removeprefix("/page/")
-            content = file.read_text(encoding="utf-8")
+            content = file.read_bytes()
             if file.name == "index.html":
                 content = content.replace(
-                    "<head>", '<head><script src="/bridge.js"></script>'
+                    b"<head>", b'<head><script src="/bridge.js"></script>'
                 )
             return route.fulfill(
                 body=content,
