@@ -14,7 +14,10 @@
     <header class="page-heading">
       <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M9 23H7a5 5 0 0 1-.7-10A9 9 0 0 1 23.5 11 6 6 0 0 1 25 23h-2M16 26V15m-4 4 4-4 4 4"/></svg></div>
       <div class="page-title"><h1>云端同步</h1></div>
-      <button id="refresh" class="button secondary" type="button"><svg class="button-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 8a6.7 6.7 0 1 0-.8 5.7M16.5 3.5V8H12"/></svg>刷新</button>
+      <div class="actions page-actions">
+        <button id="open-guide" class="button secondary" type="button" aria-haspopup="dialog" aria-controls="guide-dialog"><svg class="button-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.2"/><path d="M7.8 7.5a2.3 2.3 0 0 1 4.5.7c0 1.5-2.3 1.7-2.3 3.2M10 14h.01"/></svg>使用引导</button>
+        <button id="refresh" class="button secondary" type="button"><svg class="button-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 8a6.7 6.7 0 1 0-.8 5.7M16.5 3.5V8H12"/></svg>刷新</button>
+      </div>
     </header>
     <div id="boot-error" class="notice error" role="alert" hidden></div>
     <div id="message" class="notice" role="status" aria-live="polite" hidden></div>
@@ -28,17 +31,8 @@
       <div id="configuration-status" class="notice" hidden><span id="configuration-description"></span><button id="end-configuration" class="text-button danger" type="button">结束配置</button></div>
       <div class="form-grid"><label class="field">rclone 可执行文件<input id="rclone-binary" spellcheck="false" autocomplete="off" placeholder="rclone 或绝对路径"></label><label class="field">连接名称<div class="input-actions"><input id="rclone-remote" list="remote-options" spellcheck="false" autocomplete="off" placeholder="backup"><datalist id="remote-options"></datalist><button id="reload-remotes" class="text-button" type="button">读取</button><button id="edit-remote" class="text-button" type="button">编辑</button></div></label></div>
       <div class="client-row"><label for="remote-folder">云端同步根目录</label><input id="remote-folder" spellcheck="false" autocomplete="off" placeholder="AstrBotSync 或 桶名/AstrBotSync"></div>
-      <div class="connection-actions"><div class="actions"><button id="save-connection" class="button secondary" type="button" disabled>保存连接设置</button><button id="connect" class="button primary" type="button" disabled>检测并连接</button><button id="disconnect" class="text-button danger" type="button" hidden>暂停连接</button></div></div>
+      <div class="connection-actions"><div class="actions"><button id="save-connection" class="button secondary" type="button" disabled>保存连接设置</button><button id="connect" class="button primary" type="button" disabled>检测并连接</button><button id="disconnect" class="button danger" type="button" hidden>暂停连接</button></div></div>
       <p id="connection-error" class="error-text" role="alert" hidden></p>
-      <details class="setup-guide">
-        <summary>安装与授权</summary>
-        <div class="guide-action"><button id="install-rclone" class="button secondary" type="button">下载并安装 rclone</button></div>
-        <div id="install-status" class="notice" role="status" aria-live="polite" hidden></div>
-        <div class="guide-action"><label class="field" for="setup-command">终端配置命令</label><button id="run-setup" class="button secondary" type="button">打开配置向导</button></div>
-        <textarea id="setup-command" aria-label="终端配置命令" rows="2" readonly spellcheck="false"></textarea>
-        <div class="guide-action"><label class="field" for="reconnect-command">重新授权命令</label><button id="run-reconnect" class="button secondary" type="button">重新授权当前连接</button></div>
-        <textarea id="reconnect-command" aria-label="重新授权命令" rows="2" readonly spellcheck="false"></textarea>
-      </details>
     </section>
     <nav class="tabs" aria-label="同步管理"><button class="tab active" type="button" data-tab="tasks" aria-pressed="true" aria-controls="tasks-panel">同步任务</button><button class="tab" type="button" data-tab="runs" aria-pressed="false" aria-controls="runs-panel">执行记录</button></nav>
     <section id="tasks-panel" class="card panel" aria-labelledby="tasks-title">
@@ -50,6 +44,102 @@
       <div id="run-list"><p class="empty">暂无执行记录。</p></div>
     </section>
   </main>
+  <dialog id="guide-dialog" aria-labelledby="guide-title">
+    <div class="dialog-form">
+      <div class="dialog-heading"><h2 id="guide-title">使用引导</h2><button id="close-guide" class="text-button" type="button" aria-label="关闭使用引导">关闭</button></div>
+      <nav class="guide-nav" aria-label="引导步骤">
+        <button class="guide-tab active" type="button" data-guide-step="install" aria-pressed="true" aria-controls="guide-install">1 安装</button>
+        <button class="guide-tab" type="button" data-guide-step="storage" aria-pressed="false" aria-controls="guide-storage">2 添加存储</button>
+        <button class="guide-tab" type="button" data-guide-step="connection" aria-pressed="false" aria-controls="guide-connection">3 连接</button>
+        <button class="guide-tab" type="button" data-guide-step="tasks" aria-pressed="false" aria-controls="guide-tasks">4 同步</button>
+        <button class="guide-tab" type="button" data-guide-step="authorization" aria-pressed="false" aria-controls="guide-authorization">5 授权</button>
+      </nav>
+      <div id="guide-body" class="dialog-body">
+        <div id="guide-settings-notice" class="notice" role="status" hidden>连接设置有未保存的修改。请先返回主页面保存，再安装或配置存储。<button class="text-button" type="button" data-guide-focus="rclone-binary">返回设置</button></div>
+        <section id="guide-install" class="guide-section" aria-labelledby="guide-install-title">
+          <h3 id="guide-install-title">先安装 rclone</h3>
+          <p>rclone 是实际传输文件的工具，需要安装在 AstrBot 所在的机器或 Docker 容器内。</p>
+          <div class="guide-option">
+            <h4>自动安装</h4>
+            <p>点击下方按钮，插件会从官方源下载、校验并安装 rclone，完成后自动保存程序路径。</p>
+            <button id="install-rclone" class="button primary" type="button" disabled>下载并安装 rclone</button>
+            <div id="install-status" class="notice" role="status" aria-live="polite" hidden></div>
+          </div>
+          <div class="guide-option">
+            <h4>已经安装？</h4>
+            <p>在主页面填写「rclone 可执行文件」并保存连接设置，然后进入下一步。可填写 rclone 或程序绝对路径，要求版本 ≥ 1.74。</p>
+            <button class="button secondary" type="button" data-guide-focus="rclone-binary">填写程序路径</button>
+          </div>
+        </section>
+        <section id="guide-storage" class="guide-section" aria-labelledby="guide-storage-title" hidden>
+          <h3 id="guide-storage-title">添加存储，三种方式任选一种</h3>
+          <p>三种方式共用同一份连接配置。首次使用建议选择插件配置向导。</p>
+          <div class="guide-option">
+            <h4>插件配置向导<span class="pill">推荐</span></h4>
+            <p>直接在插件页面填写连接名称、选择网盘类型，再按提示完成授权，最后点击「保存连接」。</p>
+            <button id="run-setup" class="button primary" type="button" disabled>打开插件配置向导</button>
+          </div>
+          <div class="guide-option">
+            <h4>终端配置</h4>
+            <p>将下面的完整命令复制到 AstrBot 所在机器或容器的终端执行，按菜单添加存储。命令已指定插件使用的配置文件。</p>
+            <label class="field">终端配置命令<textarea id="setup-command" aria-label="终端配置命令" rows="2" readonly spellcheck="false"></textarea></label>
+            <p>执行前请暂停连接并结束页面配置会话；完成后回到主页面点击「读取」。</p>
+          </div>
+          <div class="guide-option">
+            <h4>官方 GUI</h4>
+            <p>启动 rclone 官方网页界面，复制登录地址到浏览器打开，再在官方界面添加连接。完成后结束配置服务。</p>
+            <button id="guide-open-gui" class="button secondary" type="button" disabled>打开官方 GUI</button>
+          </div>
+          <p>OneDrive 等账号可能需要在有浏览器的电脑执行向导给出的授权命令，再将结果粘贴回向导。</p>
+        </section>
+        <section id="guide-connection" class="guide-section" aria-labelledby="guide-connection-title" hidden>
+          <h3 id="guide-connection-title">选择连接，设置云端根目录</h3>
+          <ol class="guide-list">
+            <li>在主页面点击「读取」，选择刚添加的「连接名称」，例如 backup。</li>
+            <li>填写「云端同步根目录」。普通网盘可填 AstrBotSync；S3、R2 等对象存储填 桶名/AstrBotSync。</li>
+            <li>点击「保存连接设置」，再点击「检测并连接」。概况显示「已连接」即完成。</li>
+          </ol>
+          <p>所有任务共用这里选定的存储连接和根目录；每个任务另设自己的云端子目录。</p>
+          <button class="button primary" type="button" data-guide-focus="rclone-remote">返回设置连接</button>
+        </section>
+        <section id="guide-tasks" class="guide-section" aria-labelledby="guide-tasks-title" hidden>
+          <h3 id="guide-tasks-title">创建任务，预览后执行</h3>
+          <p>每个任务只按一个方向同步。「本机」指 AstrBot 所在机器或容器；「云端子目录」相对于刚才设置的云端根目录。</p>
+          <div class="guide-table-scroll"><table class="guide-modes">
+            <thead><tr><th>模式</th><th>方向</th><th>目标端多余文件</th></tr></thead>
+            <tbody>
+              <tr><td>上传更新</td><td>本机 → 云端</td><td>保留</td></tr>
+              <tr><td>镜像到云端</td><td>本机 → 云端</td><td>删除</td></tr>
+              <tr><td>下载更新</td><td>云端 → 本机</td><td>保留</td></tr>
+              <tr><td>镜像到本地</td><td>云端 → 本机</td><td>删除</td></tr>
+            </tbody>
+          </table></div>
+          <ol class="guide-list">
+            <li>点击「新建任务」，填写名称、模式和两端路径。</li>
+            <li>先点「预览变更」查看新增、更新和删除，再「保存任务」。</li>
+            <li>点击「立即同步」执行，在「执行记录」查看进度与结果。间隔为 0 时仅手动执行，1440 为每 24 小时一次。</li>
+          </ol>
+          <p class="notice">同名文件可能被覆盖，镜像模式还会删除目标端多余文件。运行中的数据库请先导出或创建快照。</p>
+          <button id="guide-new-task" class="button primary" type="button" disabled>新建同步任务</button>
+        </section>
+        <section id="guide-authorization" class="guide-section" aria-labelledby="guide-authorization-title" hidden>
+          <h3 id="guide-authorization-title">授权失效时，重新登录网盘</h3>
+          <p>已添加的网盘因授权失效或被撤销而无法连接时使用。连接正常时通常无需操作，普通令牌刷新由 rclone 处理。</p>
+          <div class="guide-option">
+            <h4>在插件中重新授权</h4>
+            <p>针对已保存的当前连接重新进入授权步骤。完成后点击「保存连接」，再「检测并连接」；取消或超时会保留原配置。</p>
+            <button id="run-reconnect" class="button primary" type="button" disabled>重新授权当前连接</button>
+          </div>
+          <div class="guide-option">
+            <h4>在终端中重新授权</h4>
+            <p>先暂停连接并结束页面配置会话，再把下面的完整命令复制到 AstrBot 所在机器或容器的终端执行。完成后重新检测连接。</p>
+            <label class="field">重新授权命令<textarea id="reconnect-command" aria-label="重新授权命令" rows="2" readonly spellcheck="false"></textarea></label>
+          </div>
+        </section>
+      </div>
+      <div class="dialog-actions"><button id="guide-previous" class="button secondary" type="button" disabled>上一步</button><button id="guide-next" class="button primary" type="button">下一步</button></div>
+    </div>
+  </dialog>
   <dialog id="task-dialog" aria-labelledby="task-dialog-title">
     <form id="task-form" class="dialog-form">
       <div class="dialog-heading"><div><h2 id="task-dialog-title">新建同步任务</h2></div><button id="close-task" class="text-button" type="button" aria-label="关闭任务编辑">关闭</button></div>

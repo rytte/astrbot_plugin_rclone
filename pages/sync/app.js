@@ -9,8 +9,10 @@ const modes = {
   download_mirror: {label: "镜像到本地", upload: false, description: "可能覆盖本机同名文件，并删除本机多余文件。"}
 };
 const activeStatuses = new Set(["queued", "checking", "syncing"]);
+const guideSteps = ["install", "storage", "connection", "tasks", "authorization"];
 let bridge, state, editingId = null, requesting = false;
 let polling = false, pollTimer;
+let guideStep = "install";
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -132,6 +134,49 @@ function render() {
   elements.preview.disabled = requesting || state.busy || !state.cloud.connected || state.configuration.active;
   for (const id of ["task-mode", "task-name", "task-local", "task-remote", "task-exclude", "task-interval", "task-enabled"]) elements[id].disabled = requesting;
   renderDestination();
+  renderGuide();
+}
+function showGuideStep(step) {
+  guideStep = step;
+  const index = guideSteps.indexOf(step);
+  for (const name of guideSteps) elements["guide-" + name].hidden = name !== step;
+  for (const button of document.querySelectorAll("[data-guide-step]")) {
+    const active = button.dataset.guideStep === step;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  elements["guide-previous"].disabled = index === 0;
+  elements["guide-next"].textContent = index === guideSteps.length - 1 ? "完成，返回页面" : "下一步";
+  elements["guide-body"].scrollTop = 0;
+}
+function renderGuide() {
+  const dirty = ["rclone-binary", "rclone-remote", "remote-folder"].some(id => elements[id].dataset.dirty);
+  elements["guide-settings-notice"].hidden = !dirty;
+  elements["guide-open-gui"].disabled = elements["open-gui"].disabled || dirty;
+  elements["guide-new-task"].disabled = elements["new-task"].disabled;
+  for (const button of document.querySelectorAll("[data-guide-focus]")) button.disabled = elements[button.dataset.guideFocus].disabled;
+}
+function bindGuide() {
+  elements["open-guide"].addEventListener("click", () => {
+    elements["guide-dialog"].showModal();
+    showGuideStep(guideStep);
+  });
+  elements["close-guide"].addEventListener("click", () => elements["guide-dialog"].close());
+  for (const button of document.querySelectorAll("[data-guide-step]")) button.addEventListener("click", () => showGuideStep(button.dataset.guideStep));
+  elements["guide-previous"].addEventListener("click", () => showGuideStep(guideSteps[guideSteps.indexOf(guideStep) - 1]));
+  elements["guide-next"].addEventListener("click", () => {
+    const index = guideSteps.indexOf(guideStep);
+    if (index === guideSteps.length - 1) elements["guide-dialog"].close();
+    else showGuideStep(guideSteps[index + 1]);
+  });
+  for (const button of document.querySelectorAll("[data-guide-focus]")) button.addEventListener("click", () => {
+    elements["guide-dialog"].close();
+    elements[button.dataset.guideFocus].focus();
+  });
+  for (const [id, target] of [["guide-open-gui", "open-gui"], ["guide-new-task", "new-task"]]) elements[id].addEventListener("click", () => {
+    elements["guide-dialog"].close();
+    elements[target].click();
+  });
 }
 function showTab(tab) {
   document.querySelectorAll("[data-tab]").forEach(button => { const active = button.dataset.tab === tab; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
@@ -188,7 +233,7 @@ function bindEvents() {
   bindConfiguration();
   elements.refresh.addEventListener("click", () => perform(loadState, "状态已刷新。"));
   const connectionInputs = ["rclone-binary", "rclone-remote", "remote-folder"];
-  for (const id of connectionInputs) elements[id].addEventListener("input", () => { elements[id].dataset.dirty = "true"; renderConnection(); });
+  for (const id of connectionInputs) elements[id].addEventListener("input", () => { elements[id].dataset.dirty = "true"; renderConnection(); renderGuide(); });
   elements["save-connection"].addEventListener("click", async () => {
     if (state.cloud.connected && !await confirmAction("保存连接设置", "保存后暂停连接，请重新检测。更换连接或同步根目录会改变所有任务的云端目标。", "保存设置")) return;
     await perform(async () => {
@@ -225,6 +270,7 @@ function bindEvents() {
   });
 }
 async function initialize() {
+  bindGuide();
   try {
     bridge = window.AstrBotPluginPage;
     if (!bridge || typeof bridge.ready !== "function") throw new Error("请从 AstrBot WebUI 的插件详情 → 云端同步页面打开。当前环境缺少官方插件页面 bridge。");

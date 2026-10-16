@@ -314,10 +314,12 @@ def test_rclone_connection_settings_and_setup_work_in_sandbox(browser_page):
     playwright.expect(frame.locator("#connection-label")).to_have_text("已连接")
     assert state["connection"]["remote"] == "my_onedrive"
     assert state["connection"]["folder"] == "My Backups"
-    frame.locator(".setup-guide > summary").click()
+    frame.locator("#open-guide").click()
+    frame.locator('[data-guide-step="storage"]').click()
     playwright.expect(frame.locator("#setup-command")).to_have_value(
         state["commands"]["setup"]
     )
+    frame.locator("#close-guide").click()
     frame.locator("#disconnect").click()
     frame.locator("#confirm-action").click()
     playwright.expect(frame.locator("#connection-label")).to_have_text("未连接")
@@ -327,13 +329,21 @@ def test_guide_buttons_reuse_forms_and_support_reauthorization_cancel_and_save(
     browser_page,
 ):
     page, frame, state, posts = browser_page
-    frame.locator(".setup-guide > summary").click()
+    frame.locator("#open-guide").click()
+    frame.locator('[data-guide-step="storage"]').click()
     frame.locator("#run-setup").click()
+    playwright.expect(frame.locator("#guide-dialog")).not_to_be_visible()
     playwright.expect(frame.locator("#config-title")).to_have_text("添加存储连接")
     frame.locator("#close-config").click()
     frame.locator("#rclone-remote").fill("unsaved")
+    frame.locator("#open-guide").click()
+    frame.locator('[data-guide-step="authorization"]').click()
+    playwright.expect(frame.locator("#guide-settings-notice")).to_be_visible()
     playwright.expect(frame.locator("#run-reconnect")).to_be_disabled()
+    frame.locator("#close-guide").click()
     frame.locator("#save-connection").click()
+    frame.locator("#open-guide").click()
+    playwright.expect(frame.locator("#guide-settings-notice")).not_to_be_visible()
     frame.locator("#run-reconnect").click()
     playwright.expect(frame.locator("#config-title")).to_have_text("重新授权 · unsaved")
     playwright.expect(frame.locator("#config-question")).to_contain_text(
@@ -345,6 +355,7 @@ def test_guide_buttons_reuse_forms_and_support_reauthorization_cancel_and_save(
     assert any(
         action == "config-finish" and body["save"] is False for action, body in posts
     )
+    frame.locator("#open-guide").click()
     frame.locator("#run-reconnect").click()
     frame.locator('#config-question [data-option="config_token"]').fill("new-token")
     frame.locator("#submit-config").click()
@@ -357,7 +368,7 @@ def test_guide_buttons_reuse_forms_and_support_reauthorization_cancel_and_save(
 
 def test_installer_displays_progress_success_and_failures_in_guide(browser_page):
     page, frame, state, posts = browser_page
-    frame.locator(".setup-guide > summary").click()
+    frame.locator("#open-guide").click()
     frame.locator("#install-rclone").click()
     playwright.expect(frame.locator("#install-status")).to_contain_text(
         "1.0 KiB / 2.0 KiB"
@@ -366,12 +377,16 @@ def test_installer_displays_progress_success_and_failures_in_guide(browser_page)
     assert any(action == "install-rclone" and body == {} for action, body in posts)
     state["busy"] = False
     state["installation"].update(status="failed", error="校验失败，请重试。")
+    frame.locator("#close-guide").click()
     frame.locator("#refresh").click()
+    frame.locator("#open-guide").click()
     playwright.expect(frame.locator("#install-status")).to_contain_text("校验失败")
     playwright.expect(frame.locator("#install-rclone")).to_be_enabled()
     state["installation"].update(status="completed")
     state["connection"]["binary"] = "/private/bin/rclone"
+    frame.locator("#close-guide").click()
     frame.locator("#refresh").click()
+    frame.locator("#open-guide").click()
     playwright.expect(frame.locator("#install-status")).to_contain_text(
         "程序路径已保存"
     )
@@ -420,11 +435,55 @@ def test_layout_and_theme_have_no_horizontal_overflow(browser_page, width, dark)
     if width == 1280 and not dark:
         page.screenshot(path=str(output / "editor.png"))
     frame.locator("#close-task").click()
-    frame.locator(".setup-guide > summary").click()
+    frame.locator("#open-guide").click()
+    for step in ("install", "storage", "connection", "tasks", "authorization"):
+        frame.locator(f'[data-guide-step="{step}"]').click()
+        assert frame.locator("#guide-dialog").evaluate(
+            "e => e.scrollWidth <= e.clientWidth"
+        )
+    frame.locator('[data-guide-step="storage"]').click()
     assert frame.locator("body").evaluate(
         "element => element.scrollWidth <= window.innerWidth"
     )
-    page.screenshot(path=str(output / f"setup-{name}.png"), full_page=True)
+    page.screenshot(path=str(output / f"guide-{name}.png"), full_page=True)
+
+
+def test_guide_navigation_opens_existing_controls_and_returns_to_settings(browser_page):
+    page, frame, state, posts = browser_page
+    frame.locator("#open-guide").click()
+    playwright.expect(frame.locator("#guide-install")).to_be_visible()
+    playwright.expect(frame.locator("#guide-previous")).to_be_disabled()
+    frame.locator("#guide-next").click()
+    playwright.expect(frame.locator("#guide-storage")).to_be_visible()
+    assert not posts
+    frame.locator("#guide-previous").click()
+    playwright.expect(frame.locator("#guide-install")).to_be_visible()
+    frame.locator("#guide-next").click()
+    frame.locator("#guide-open-gui").click()
+    playwright.expect(frame.locator("#guide-dialog")).not_to_be_visible()
+    playwright.expect(frame.locator("#gui-dialog")).to_be_visible()
+    frame.locator("#close-gui").click()
+    frame.locator("#open-guide").click()
+    playwright.expect(frame.locator("#guide-storage")).to_be_visible()
+    frame.locator('[data-guide-step="connection"]').click()
+    frame.locator('[data-guide-focus="rclone-remote"]').click()
+    playwright.expect(frame.locator("#guide-dialog")).not_to_be_visible()
+    playwright.expect(frame.locator("#rclone-remote")).to_be_focused()
+    frame.locator("#open-guide").click()
+    frame.locator('[data-guide-step="tasks"]').click()
+    frame.locator("#guide-new-task").click()
+    playwright.expect(frame.locator("#guide-dialog")).not_to_be_visible()
+    playwright.expect(frame.locator("#task-dialog")).to_be_visible()
+    frame.locator("#close-task").click()
+    frame.locator("#open-guide").click()
+    frame.locator("#guide-next").click()
+    playwright.expect(frame.locator("#guide-authorization")).to_be_visible()
+    playwright.expect(frame.locator("#guide-next")).to_have_text("完成，返回页面")
+    frame.locator("#guide-next").click()
+    playwright.expect(frame.locator("#guide-dialog")).not_to_be_visible()
+    frame.locator("#open-guide").click()
+    frame.locator("#close-guide").press("Escape")
+    playwright.expect(frame.locator("#guide-dialog")).not_to_be_visible()
 
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, False), (1280, True)])

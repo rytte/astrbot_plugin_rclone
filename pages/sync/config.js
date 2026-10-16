@@ -231,8 +231,8 @@ async function closeConfig() {
 
 function bindConfiguration() {
   elements["create-remote"].addEventListener("click", () => openConfig());
-  elements["run-setup"].addEventListener("click", () => openConfig());
-  elements["run-reconnect"].addEventListener("click", reconnectConfig);
+  elements["run-setup"].addEventListener("click", () => { elements["guide-dialog"].close(); openConfig(); });
+  elements["run-reconnect"].addEventListener("click", () => { elements["guide-dialog"].close(); reconnectConfig(); });
   elements["install-rclone"].addEventListener("click", () => perform(() => post("install-rclone")));
   elements["edit-remote"].addEventListener("click", () => openConfig(true));
   elements["reload-remotes"].addEventListener("click", () => perform(reloadRemotes, "已读取存储连接。"));
