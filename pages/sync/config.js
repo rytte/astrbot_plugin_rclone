@@ -1,6 +1,6 @@
 "use strict";
 
-let remoteCatalog = [], providerCatalog = [], configMetadata = null, configProgress = null, configEditing = false, guiSession = null;
+let remoteCatalog = [], providerCatalog = [], configMetadata = null, configProgress = null, configEditing = false, configReconnecting = false, guiSession = null;
 
 function renderConfiguration() {
   const active = state.configuration.active;
@@ -14,6 +14,8 @@ function renderConfiguration() {
     message("配置会话已结束或到期，未保存的表单需要重新填写。", true);
   }
   for (const id of ["create-remote", "open-gui", "edit-remote"]) elements[id].disabled = requesting || state.busy || active;
+  const dirty = ["rclone-binary", "rclone-remote", "remote-folder"].some(id => elements[id].dataset.dirty);
+  for (const id of ["install-rclone", "run-setup", "run-reconnect"]) elements[id].disabled = requesting || state.busy || active || dirty;
   elements["open-gui"].disabled = requesting || state.busy || active && !guiSession;
   elements["reload-remotes"].disabled = requesting;
   for (const id of ["save-connection", "connect", "disconnect", "rclone-binary", "rclone-remote", "remote-folder"]) elements[id].disabled ||= active;
@@ -21,9 +23,23 @@ function renderConfiguration() {
   elements["configuration-description"].textContent = active ? `${state.configuration.mode === "gui" ? "官方 GUI 正在运行" : "正在配置连接"}，同步已暂停。会话到期：${date(state.configuration.expires_at)}。` : "";
   elements["end-configuration"].hidden = !state.configuration.session_id;
   elements["end-configuration"].disabled = requesting;
-  const current = remoteCatalog.find(item => item.name === elements["rclone-remote"].value);
-  elements["remote-description"].textContent = current ? `后端：${current.type} · 连接与官方 GUI 共用配置` : "先添加存储，或读取已有的 rclone 连接。";
+  renderInstallation();
   updateApplicableFields();
+}
+
+function renderInstallation() {
+  const install = state.installation, box = elements["install-status"];
+  box.hidden = install.status === "idle";
+  box.className = "notice" + (["failed", "cancelled"].includes(install.status) ? " error" : "");
+  const descriptions = {
+    checking: "正在获取官方稳定版信息与校验文件…",
+    downloading: `正在下载 ${install.version}：${size(install.received)}${install.total ? " / " + size(install.total) : ""}。`,
+    verifying: "正在校验安装包，并检查 rclone 版本和官方 GUI…",
+    completed: `rclone ${install.version} 已安装，程序路径已保存。请添加存储或重新检测连接。`,
+    failed: install.error, cancelled: install.error
+  };
+  box.textContent = descriptions[install.status] || "";
+  elements["install-rclone"].textContent = ["checking", "downloading", "verifying"].includes(install.status) ? "正在安装…" : "下载并安装 rclone";
 }
 
 async function reloadRemotes() {
@@ -96,10 +112,9 @@ function configInput(option, value, configured = false, fullChoices = false) {
   if (fullChoices && examples.length && input.tagName === "INPUT" && input.type !== "password") {
     attachQuestionChoices(field, input, option, configured);
   }
-  if (configured) field.append(node("span", "muted small", "已有敏感值不回显；留空保留，更换时输入新值。"));
   if (option.Help) {
     const details = node("details", "option-help"), help = node("p", "muted small", option.Help);
-    details.append(node("summary", "", option.Help.split("\n")[0]), help); field.append(details);
+    details.append(node("summary", "", "字段说明"), help); field.append(details);
   }
   return field;
 }
@@ -140,7 +155,6 @@ function updateApplicableFields() {
 
 async function loadConfigFields(name = null) {
   configMetadata = await post("config-fields", {backend: elements["config-backend"].value, name});
-  elements["provider-description"].textContent = configMetadata.provider.Description || "";
   elements["config-fields"].replaceChildren(); elements["config-advanced"].replaceChildren();
   for (const option of configMetadata.provider.Options || []) {
     if ((option.Hide || 0) & 1) continue;
@@ -153,7 +167,7 @@ async function loadConfigFields(name = null) {
 async function openConfig(edit = false) {
   let prepared = false;
   await perform(async () => {
-    configProgress = null; configEditing = edit;
+    configProgress = null; configEditing = edit; configReconnecting = false;
     await reloadRemotes();
     providerCatalog = (await bridge.apiGet("providers")).providers;
     elements["config-backend"].replaceChildren();
@@ -176,6 +190,20 @@ async function openConfig(edit = false) {
   if (prepared) elements["config-dialog"].showModal();
 }
 
+async function reconnectConfig() {
+  let prepared = false;
+  await perform(async () => {
+    configProgress = await post("config-reconnect");
+    configEditing = true; configReconnecting = true;
+    elements["config-name"].value = state.connection.remote;
+    elements["config-title"].textContent = `重新授权 · ${state.connection.remote}`;
+    elements["config-error"].hidden = true;
+    renderConfigQuestion();
+    prepared = true;
+  });
+  if (prepared) elements["config-dialog"].showModal();
+}
+
 function renderConfigQuestion() {
   elements["config-basics"].hidden = true;
   elements["config-question"].hidden = false;
@@ -184,7 +212,7 @@ function renderConfigQuestion() {
   // Hidden initial fields must not participate in validation for later questions.
   for (const input of document.querySelectorAll("#config-basics input, #config-basics select")) input.disabled = true;
   if (configProgress.complete) {
-    elements["config-question"].append(node("div", "notice", "配置步骤已完成。点击保存，将连接写入正式配置文件。"));
+    elements["config-question"].append(node("div", "notice", configReconnecting ? "授权完成，请保存。" : "配置完成，请保存。"));
     elements["submit-config"].textContent = "保存连接";
   } else {
     elements["config-question"].append(configInput(configProgress.option, undefined, false, true));
@@ -203,6 +231,9 @@ async function closeConfig() {
 
 function bindConfiguration() {
   elements["create-remote"].addEventListener("click", () => openConfig());
+  elements["run-setup"].addEventListener("click", () => openConfig());
+  elements["run-reconnect"].addEventListener("click", reconnectConfig);
+  elements["install-rclone"].addEventListener("click", () => perform(() => post("install-rclone")));
   elements["edit-remote"].addEventListener("click", () => openConfig(true));
   elements["reload-remotes"].addEventListener("click", () => perform(reloadRemotes, "已读取存储连接。"));
   elements["config-backend"].addEventListener("change", () => configOperation(() => loadConfigFields(), "config-error"));
@@ -215,8 +246,10 @@ function bindConfiguration() {
         const name = elements["config-name"].value;
         await post("config-finish", {session_id: configProgress.session_id, save: true});
         configProgress = null; elements["config-dialog"].close();
-        elements["rclone-remote"].value = name; elements["rclone-remote"].dataset.dirty = "true";
-        await reloadRemotes(); message("存储连接已保存。请保存连接设置并检测连接。"); return;
+        if (!configReconnecting) {
+          elements["rclone-remote"].value = name; elements["rclone-remote"].dataset.dirty = "true";
+        }
+        await reloadRemotes(); message(configReconnecting ? "授权配置已保存，请重新检测连接。" : "存储连接已保存。请保存连接设置并检测连接。"); return;
       }
       if (configProgress) {
         const input = elements["config-question"].querySelector("[data-option]");

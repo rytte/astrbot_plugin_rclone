@@ -71,7 +71,7 @@ async def test_native_routes_require_dashboard_jwt_and_csrf(page_plugin):
     code, state = await call(page_plugin, "state")
     assert code == 200 and state["csrf"]
     assert "tokens" not in state
-    assert len(page_plugin.context.registered_web_apis) == 16
+    assert len(page_plugin.context.registered_web_apis) == 18
     code, result = await call(
         page_plugin,
         "connection",
@@ -140,7 +140,15 @@ async def test_page_is_discovered_by_real_astrbot_page_service():
 
 @pytest.mark.parametrize(
     "action",
-    ["config-fields", "config-begin", "config-answer", "config-finish", "gui-start"],
+    [
+        "config-fields",
+        "config-begin",
+        "config-answer",
+        "config-finish",
+        "gui-start",
+        "config-reconnect",
+        "install-rclone",
+    ],
 )
 async def test_configuration_mutations_require_csrf_before_starting_processes(
     page_plugin, action
@@ -148,6 +156,18 @@ async def test_configuration_mutations_require_csrf_before_starting_processes(
     await call(page_plugin, "state")
     code, _ = await call(page_plugin, action, payload={})
     assert code == 403
+    assert not page_plugin.sync.configuration.active
+    assert not page_plugin.sync.installer.active
+
+
+@pytest.mark.parametrize("action", ["config-reconnect", "install-rclone"])
+async def test_setup_actions_reject_arbitrary_commands(page_plugin, action):
+    _, state = await call(page_plugin, "state")
+    code, result = await call(
+        page_plugin, action, payload={"csrf": state["csrf"], "command": "whoami"}
+    )
+    assert code == 400 and "未知字段" in result["message"]
+    assert not page_plugin.sync.installer.active
     assert not page_plugin.sync.configuration.active
 
 

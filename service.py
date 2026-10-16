@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+import httpx
+
 from .configuration import Configuration
 from .files import (
     SyncError,
@@ -23,6 +25,7 @@ from .files import (
     stage_file,
     write_json,
 )
+from .installer import RcloneInstaller
 from .rclone import (
     DEFAULT_CONNECTION,
     MODES,
@@ -129,6 +132,8 @@ class SyncService:
             {key: self.data["connection"][key] for key in DEFAULT_CONNECTION},
         )
         self.configuration = Configuration(self.cloud, self.directory)
+        self.installer = RcloneInstaller(self.directory)
+        self.install_task = None
         self.queue = asyncio.Queue()
         self.worker = self.scheduler = self.current = None
         self.current_run = None
@@ -314,6 +319,7 @@ class SyncService:
             },
             "cloud": self.cloud.status(),
             "configuration": self.configuration.status(),
+            "installation": dict(self.installer.state),
             "root": str(self.root),
             "examples": {
                 "plugins": str(self.root / "data" / "plugin_data"),
@@ -326,11 +332,15 @@ class SyncService:
 
     @property
     def busy(self):
-        return self.previewing or any(
-            run["status"] in ACTIVE for run in self.data["runs"]
+        return (
+            self.installer.active
+            or self.previewing
+            or any(run["status"] in ACTIVE for run in self.data["runs"])
         )
 
     def require_idle(self):
+        if self.installer.active:
+            raise SyncError("正在安装 rclone，请等待安装完成后再操作。")
         if self.configuration.active:
             raise SyncError("正在配置存储连接，请先保存或结束配置。")
         if self.closed:
@@ -371,16 +381,67 @@ class SyncService:
             self.persist()
 
     async def begin_configuration(
-        self, owner: str, payload: dict, *, gui: bool = False
+        self, owner: str, payload: dict, *, gui: bool = False, reconnect: bool = False
     ) -> dict:
+        if reconnect:
+            check_keys(payload, set(), set())
         self.require_idle()
         async with self.cloud_lock:
             await self.cloud.disconnect()
             self.data["connection"]["enabled"] = False
             self.persist()
+            if reconnect:
+                return await self.configuration.reconnect(
+                    owner, self.cloud.settings["remote"]
+                )
             if gui:
                 return await self.configuration.gui(owner, payload)
             return await self.configuration.begin(owner, payload)
+
+    def install_rclone(self) -> None:
+        self.require_idle()
+        self.installer.state = {
+            "status": "checking",
+            "received": 0,
+            "total": None,
+            "error": "",
+        }
+        self.install_task = asyncio.create_task(self._install_rclone())
+
+    async def _install_rclone(self) -> None:
+        try:
+            async with self.cloud_lock:
+                await self.cloud.disconnect()
+                self.data["connection"]["enabled"] = False
+                self.persist()
+                async with asyncio.timeout(600):
+                    binary, version = await self.installer.install()
+                settings = {**self.cloud.settings, "binary": binary}
+                self.cloud.configure(settings)
+                self.data["connection"] = {**settings, "enabled": False}
+                self.persist()
+                self.cloud.version = version
+                self.installer.state.update(status="completed", binary=binary)
+        except asyncio.CancelledError:
+            self.installer.state.update(
+                status="cancelled", error="插件停止，安装已取消。"
+            )
+            raise
+        except TimeoutError:
+            self.installer.state.update(
+                status="failed", error="下载或安装超时，请重试。"
+            )
+        except httpx.HTTPError:
+            self.installer.state.update(
+                status="failed",
+                error="无法从 rclone 官方下载站获取安装文件，请检查网络后重试。",
+            )
+        except (SyncError, OSError) as exc:
+            self.installer.state.update(status="failed", error=str(exc))
+        except Exception:
+            self.installer.state.update(
+                status="failed", error="rclone 安装失败，请重试或手动安装。"
+            )
 
     @classmethod
     def validate_pair(cls, first, second):
@@ -508,6 +569,8 @@ class SyncService:
                 self.previewing = False
 
     def enqueue(self, task_id, *, scheduled=False):
+        if self.installer.active:
+            raise SyncError("正在安装 rclone，请等待安装完成后重新检测连接。")
         if self.configuration.active:
             raise SyncError("配置期间暂停同步，请先结束配置并重新检测连接。")
         if self.closed or self.previewing:
@@ -571,6 +634,7 @@ class SyncService:
             if (
                 self.cloud.status()["connected"]
                 and not self.configuration.active
+                and not self.installer.active
                 and not self.previewing
             ):
                 for task in list(self.data["tasks"].values()):
@@ -659,6 +723,9 @@ class SyncService:
 
     async def close(self):
         self.closed = True
+        if self.install_task:
+            self.install_task.cancel()
+            await asyncio.gather(self.install_task, return_exceptions=True)
         for task in (self.scheduler, self.worker):
             if task:
                 task.cancel()

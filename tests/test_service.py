@@ -79,6 +79,72 @@ async def test_failed_sync_is_reported_and_worker_continues(service, tmp_path):
     assert following["status"] == "completed" and following["progress"]["deletes"] == 2
 
 
+async def test_installation_excludes_other_operations_and_saves_program_path(
+    service, tmp_path, monkeypatch
+):
+    started, release = asyncio.Event(), asyncio.Event()
+    binary = str(tmp_path / "private" / "bin" / "rclone.exe")
+
+    async def install():
+        started.set()
+        await release.wait()
+        return binary, "rclone v1.75.2"
+
+    monkeypatch.setattr(service.installer, "install", install)
+    source = tmp_path / "files"
+    source.mkdir()
+    task = create_task(service, source)
+    service.install_rclone()
+    with pytest.raises(SyncError, match="正在安装"):
+        service.install_rclone()
+    with pytest.raises(SyncError, match="正在安装"):
+        service.enqueue(task["id"])
+    await started.wait()
+    assert service.busy and not service.cloud.connected
+    with pytest.raises(SyncError, match="正在安装"):
+        await service.begin_configuration("admin", {}, reconnect=True)
+    release.set()
+    await service.install_task
+    assert service.state()["installation"]["status"] == "completed"
+    assert service.cloud.settings["binary"] == binary
+    assert not service.busy and not service.cloud.connected
+    saved = json.loads(service.state_path.read_text())
+    assert saved["connection"]["binary"] == binary
+    assert not saved["connection"]["enabled"]
+
+
+async def test_stopping_plugin_cancels_installation(service, monkeypatch):
+    started = asyncio.Event()
+
+    async def install():
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(service.installer, "install", install)
+    service.install_rclone()
+    await started.wait()
+    await service.close()
+    assert service.install_task.done()
+    assert service.installer.state["status"] == "cancelled"
+
+
+async def test_failed_download_does_not_change_the_configured_program(
+    service, monkeypatch
+):
+    before = dict(service.cloud.settings)
+
+    async def install():
+        raise SyncError("SHA-256 校验失败")
+
+    monkeypatch.setattr(service.installer, "install", install)
+    service.install_rclone()
+    await service.install_task
+    assert service.installer.state["status"] == "failed"
+    assert "SHA-256" in service.installer.state["error"]
+    assert service.cloud.settings == before
+    assert not service.busy and not service.cloud.connected
+
+
 async def test_running_and_queued_cancellation_keep_worker_available(service, tmp_path):
     source = tmp_path / "local_path"
     source.mkdir()

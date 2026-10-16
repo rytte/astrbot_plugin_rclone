@@ -139,6 +139,55 @@ async def test_onedrive_questions_are_driven_by_rclone_and_cancel_reaps_process(
     assert not config.cloud.config_path.exists() and not config.staging.exists()
 
 
+async def test_reconnect_replaces_existing_oauth_token_only_after_save(configuration):
+    config = configuration
+    original = (
+        '[ms]\ntype = onedrive\ntoken = {"access_token":"private-old-token"}\n'
+        "drive_id = existing-drive\ndrive_type = personal\n"
+        "[other]\ntype = alias\nremote = /unchanged\n"
+    ).encode()
+    config.cloud.config_path.write_bytes(original)
+    result = await config.reconnect("admin", "ms")
+    assert not result["complete"]
+    assert result["option"]["Name"] == "config_token"
+    assert "private-old-token" not in json.dumps(result)
+    assert 'rclone authorize "onedrive"' in result["option"]["Help"]
+    with pytest.raises(SyncError, match="其他用户"):
+        await config.answer(
+            "another", {"session_id": result["session_id"], "answer": ""}
+        )
+    invalid = await config.answer(
+        "admin", {"session_id": result["session_id"], "answer": "invalid-token"}
+    )
+    assert invalid["error"] and invalid["option"]["Name"] == "config_token"
+    process = config.process.process
+    await config.finish("admin", {"session_id": result["session_id"], "save": False})
+    assert config.cloud.config_path.read_bytes() == original
+    assert process.returncode is not None and not config.staging.exists()
+
+    # A backend without an OAuth step still uses the same transactional save.
+    result = await config.reconnect("admin", "other")
+    assert result["complete"]
+    await config.process.rpc(
+        "config/update",
+        {
+            "name": "other",
+            "parameters": {"remote": "/changed"},
+            "opt": {"nonInteractive": True},
+        },
+    )
+    assert config.cloud.config_path.read_bytes() == original
+    await config.finish("admin", {"session_id": result["session_id"], "save": True})
+    saved = config.cloud.config_path.read_text()
+    assert "/changed" in saved and "private-old-token" in saved
+
+
+async def test_reconnect_missing_remote_does_not_start_a_session(configuration):
+    with pytest.raises(SyncError, match="尚未配置"):
+        await configuration.reconnect("admin", "missing")
+    assert not configuration.active and not configuration.staging.exists()
+
+
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))

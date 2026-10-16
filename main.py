@@ -58,6 +58,8 @@ class RclonePlugin(Star):
             "config-begin": "POST",
             "config-answer": "POST",
             "config-finish": "POST",
+            "config-reconnect": "POST",
+            "install-rclone": "POST",
             "gui-start": "POST",
         }.items():
             handler = functools.partial(self.dispatch, action)
@@ -151,10 +153,15 @@ class RclonePlugin(Star):
                         payload["backend"], payload["name"]
                     )
                 )
-            if action in {"config-begin", "gui-start"}:
+            if action in {"config-begin", "gui-start", "config-reconnect"}:
+                if action == "config-reconnect":
+                    check_keys(payload, set(), set())
                 return json_response(
                     await self.sync.begin_configuration(
-                        username, payload, gui=action == "gui-start"
+                        username,
+                        payload,
+                        gui=action == "gui-start",
+                        reconnect=action == "config-reconnect",
                     )
                 )
             if action == "config-answer":
@@ -165,7 +172,10 @@ class RclonePlugin(Star):
                 return json_response(
                     await self.sync.configuration.finish(username, payload)
                 )
-            if action == "connection":
+            if action == "install-rclone":
+                check_keys(payload, set(), set())
+                self.sync.install_rclone()
+            elif action == "connection":
                 await self.sync.save_connection(payload)
             elif action in {"connect", "disconnect"}:
                 check_keys(payload, set(), set())

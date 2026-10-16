@@ -37,6 +37,7 @@ def browser_page():
     state = {
         "csrf": "test-csrf",
         "configuration": {"active": False},
+        "installation": {"status": "idle", "received": 0, "total": None, "error": ""},
         "connection": {
             "binary": "rclone",
             "remote": "onedrive",
@@ -135,7 +136,9 @@ def browser_page():
                 "values": {},
                 "configured": [],
             }
-        elif action == "config-begin":
+        elif action in {"config-begin", "config-reconnect"}:
+            if action == "config-reconnect":
+                payload = {"name": state["connection"]["remote"], "backend": "onedrive"}
             pending.update(payload)
             state["configuration"] = {
                 "active": True,
@@ -181,6 +184,16 @@ def browser_page():
             }
         elif action == "state":
             result = state
+        elif action == "install-rclone":
+            state["installation"] = {
+                "status": "downloading",
+                "version": "v1.75.2",
+                "received": 1024,
+                "total": 2048,
+                "error": "",
+            }
+            state["cloud"]["connected"] = False
+            state["busy"] = True
         elif action == "connection":
             state["connection"] = payload
             state["cloud"]["connected"] = False
@@ -308,6 +321,63 @@ def test_rclone_connection_settings_and_setup_work_in_sandbox(browser_page):
     frame.locator("#disconnect").click()
     frame.locator("#confirm-action").click()
     playwright.expect(frame.locator("#connection-label")).to_have_text("未连接")
+
+
+def test_guide_buttons_reuse_forms_and_support_reauthorization_cancel_and_save(
+    browser_page,
+):
+    page, frame, state, posts = browser_page
+    frame.locator(".setup-guide > summary").click()
+    frame.locator("#run-setup").click()
+    playwright.expect(frame.locator("#config-title")).to_have_text("添加存储连接")
+    frame.locator("#close-config").click()
+    frame.locator("#rclone-remote").fill("unsaved")
+    playwright.expect(frame.locator("#run-reconnect")).to_be_disabled()
+    frame.locator("#save-connection").click()
+    frame.locator("#run-reconnect").click()
+    playwright.expect(frame.locator("#config-title")).to_have_text("重新授权 · unsaved")
+    playwright.expect(frame.locator("#config-question")).to_contain_text(
+        "rclone authorize"
+    )
+    playwright.expect(frame.locator("#run-setup")).to_be_disabled()
+    frame.locator("#close-config").click()
+    playwright.expect(frame.locator("#config-dialog")).not_to_be_visible()
+    assert any(
+        action == "config-finish" and body["save"] is False for action, body in posts
+    )
+    frame.locator("#run-reconnect").click()
+    frame.locator('#config-question [data-option="config_token"]').fill("new-token")
+    frame.locator("#submit-config").click()
+    frame.locator("#submit-config").click()
+    playwright.expect(frame.locator("#config-dialog")).not_to_be_visible()
+    playwright.expect(frame.locator("#message")).to_contain_text("授权配置已保存")
+    playwright.expect(frame.locator("#connect")).to_be_enabled()
+    assert any(action == "config-reconnect" and body == {} for action, body in posts)
+
+
+def test_installer_displays_progress_success_and_failures_in_guide(browser_page):
+    page, frame, state, posts = browser_page
+    frame.locator(".setup-guide > summary").click()
+    frame.locator("#install-rclone").click()
+    playwright.expect(frame.locator("#install-status")).to_contain_text(
+        "1.0 KiB / 2.0 KiB"
+    )
+    playwright.expect(frame.locator("#run-setup")).to_be_disabled()
+    assert any(action == "install-rclone" and body == {} for action, body in posts)
+    state["busy"] = False
+    state["installation"].update(status="failed", error="校验失败，请重试。")
+    frame.locator("#refresh").click()
+    playwright.expect(frame.locator("#install-status")).to_contain_text("校验失败")
+    playwright.expect(frame.locator("#install-rclone")).to_be_enabled()
+    state["installation"].update(status="completed")
+    state["connection"]["binary"] = "/private/bin/rclone"
+    frame.locator("#refresh").click()
+    playwright.expect(frame.locator("#install-status")).to_contain_text(
+        "程序路径已保存"
+    )
+    playwright.expect(frame.locator("#rclone-binary")).to_have_value(
+        "/private/bin/rclone"
+    )
 
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, False), (1280, True)])

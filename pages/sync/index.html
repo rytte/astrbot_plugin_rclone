@@ -13,69 +13,81 @@
   <main class="workspace">
     <header class="page-heading">
       <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M9 23H7a5 5 0 0 1-.7-10A9 9 0 0 1 23.5 11 6 6 0 0 1 25 23h-2M16 26V15m-4 4 4-4 4 4"/></svg></div>
-      <div><p class="eyebrow">RCLONE / CLOUD SYNC</p><h1>云端同步</h1><p class="muted">在本机与云端之间，按所选方向更新或镜像文件。</p></div>
-      <button id="refresh" class="button secondary" type="button">刷新</button>
+      <div class="page-title"><h1>云端同步</h1></div>
+      <button id="refresh" class="button secondary" type="button"><svg class="button-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 8a6.7 6.7 0 1 0-.8 5.7M16.5 3.5V8H12"/></svg>刷新</button>
     </header>
     <div id="boot-error" class="notice error" role="alert" hidden></div>
     <div id="message" class="notice" role="status" aria-live="polite" hidden></div>
     <section class="stats" aria-label="同步概况">
-      <div class="stat"><span>云端连接</span><strong id="connection-label">读取中</strong><small id="connection-description">多个存储后端</small></div>
-      <div class="stat"><span>同步任务</span><strong id="task-count">—</strong><small>上传 / 下载 · 更新 / 镜像</small></div>
-      <div class="stat"><span>执行状态</span><strong id="activity-label">—</strong><small id="activity-description">任务依次执行</small></div>
+      <div class="stat"><span>云端连接</span><strong id="connection-label">读取中</strong></div>
+      <div class="stat"><span>同步任务</span><strong id="task-count">—</strong></div>
+      <div class="stat"><span>执行状态</span><strong id="activity-label">—</strong></div>
     </section>
-    <section class="card connection">
-      <div class="section-heading"><div><p class="eyebrow">STORAGE CONNECTIONS</p><h2><span class="status-dot" id="connection-dot"></span>存储连接</h2><p class="muted">配置存储连接，为任务设置本机路径和云端子目录。</p></div><div class="actions"><button id="create-remote" class="button primary" type="button">＋ 添加存储</button><button id="open-gui" class="button secondary" type="button">官方 GUI</button></div></div>
-      <div class="setup-paths"><div><span class="step-number">1</span><div><strong>添加存储连接</strong><p>根据 rclone 自动生成表单，复杂配置可使用官方 GUI。</p></div></div><div><span class="step-number">2</span><div><strong>设置同步目标</strong><p>设置同步根目录，对象存储填写桶名和同步前缀。</p></div></div><div><span class="step-number">3</span><div><strong>创建同步任务</strong><p>选择同步模式与两端路径，预览变更后执行。</p></div></div></div>
+    <section class="card connection" aria-labelledby="storage-title">
+      <div class="section-heading"><div><h2 id="storage-title"><span class="status-dot" id="connection-dot"></span>存储连接</h2></div><div class="actions"><button id="create-remote" class="button primary" type="button">＋ 添加存储</button><button id="open-gui" class="button secondary" type="button">官方 GUI</button></div></div>
       <div id="configuration-status" class="notice" hidden><span id="configuration-description"></span><button id="end-configuration" class="text-button danger" type="button">结束配置</button></div>
-      <div class="form-grid"><label class="field">rclone 可执行文件<input id="rclone-binary" spellcheck="false" autocomplete="off" placeholder="rclone 或绝对路径"><span class="muted small">安装在 AstrBot 所在机器或容器中，版本 ≥ 1.74。</span></label><label class="field">连接名称（remote）<div class="input-actions"><input id="rclone-remote" list="remote-options" spellcheck="false" autocomplete="off" placeholder="backup"><datalist id="remote-options"></datalist><button id="reload-remotes" class="text-button" type="button">读取</button><button id="edit-remote" class="text-button" type="button">编辑</button></div><span id="remote-description" class="muted small">先添加存储，或读取已有的 rclone 连接。</span></label></div>
+      <div class="form-grid"><label class="field">rclone 可执行文件<input id="rclone-binary" spellcheck="false" autocomplete="off" placeholder="rclone 或绝对路径"></label><label class="field">连接名称<div class="input-actions"><input id="rclone-remote" list="remote-options" spellcheck="false" autocomplete="off" placeholder="backup"><datalist id="remote-options"></datalist><button id="reload-remotes" class="text-button" type="button">读取</button><button id="edit-remote" class="text-button" type="button">编辑</button></div></label></div>
       <div class="client-row"><label for="remote-folder">云端同步根目录</label><input id="remote-folder" spellcheck="false" autocomplete="off" placeholder="AstrBotSync 或 桶名/AstrBotSync"></div>
       <div class="connection-actions"><div class="actions"><button id="save-connection" class="button secondary" type="button" disabled>保存连接设置</button><button id="connect" class="button primary" type="button" disabled>检测并连接</button><button id="disconnect" class="text-button danger" type="button" hidden>暂停连接</button></div></div>
       <p id="connection-error" class="error-text" role="alert" hidden></p>
-      <details class="setup-guide"><summary>安装、终端配置与授权说明</summary><p>先从 <a href="https://rclone.org/downloads/">rclone.org/downloads</a> 下载 rclone。动态表单使用 rclone 的原始字段与帮助，未翻译的字段会保留英文。OneDrive 等 OAuth 后端在远程部署时，可能仍需在有浏览器的电脑执行向导给出的授权命令，再粘贴结果。</p><label class="field">终端配置命令<textarea id="setup-command" rows="2" readonly spellcheck="false"></textarea></label><label class="field">重新授权命令<textarea id="reconnect-command" rows="2" readonly spellcheck="false"></textarea></label><p class="muted small">共用配置文件：<code id="config-path"></code>。包含登录令牌或密钥，请勿上传分享。Docker 需要安装容器内的 rclone，并持久化 AstrBot 的 data 目录。插件按任务模式和目录执行同步；官方 GUI 可以管理更广范围的文件和连接。</p></details>
+      <details class="setup-guide">
+        <summary>安装与授权</summary>
+        <div class="guide-action"><button id="install-rclone" class="button secondary" type="button">下载并安装 rclone</button></div>
+        <div id="install-status" class="notice" role="status" aria-live="polite" hidden></div>
+        <div class="guide-action"><label class="field" for="setup-command">终端配置命令</label><button id="run-setup" class="button secondary" type="button">打开配置向导</button></div>
+        <textarea id="setup-command" aria-label="终端配置命令" rows="2" readonly spellcheck="false"></textarea>
+        <div class="guide-action"><label class="field" for="reconnect-command">重新授权命令</label><button id="run-reconnect" class="button secondary" type="button">重新授权当前连接</button></div>
+        <textarea id="reconnect-command" aria-label="重新授权命令" rows="2" readonly spellcheck="false"></textarea>
+      </details>
     </section>
-    <nav class="tabs" aria-label="同步管理"><button class="tab active" data-tab="tasks" aria-pressed="true">同步任务</button><button class="tab" data-tab="runs" aria-pressed="false">执行记录</button></nav>
-    <section id="tasks-panel" class="card panel">
-      <div class="section-heading"><div><h2>同步任务</h2><p class="muted">支持上传更新、镜像到云端、下载更新和镜像到本地。</p></div><button id="new-task" class="button primary" type="button" disabled>＋ 新建任务</button></div>
+    <nav class="tabs" aria-label="同步管理"><button class="tab active" type="button" data-tab="tasks" aria-pressed="true" aria-controls="tasks-panel">同步任务</button><button class="tab" type="button" data-tab="runs" aria-pressed="false" aria-controls="runs-panel">执行记录</button></nav>
+    <section id="tasks-panel" class="card panel" aria-labelledby="tasks-title">
+      <div class="section-heading"><div><h2 id="tasks-title">同步任务</h2></div><button id="new-task" class="button primary" type="button" disabled>＋ 新建任务</button></div>
       <div id="task-list" class="task-list"><p class="empty">正在读取任务…</p></div>
-      <p class="footnote">更新模式保留目标端多余文件；镜像模式会删除它们。同名文件可能被覆盖，运行中的数据库请使用导出文件或快照。</p>
     </section>
-    <section id="runs-panel" class="card panel" hidden>
-      <div class="section-heading"><div><h2>执行记录</h2><p class="muted">显示同步状态、传输数量和删除数量；保留最近 200 条已结束记录。</p></div></div>
+    <section id="runs-panel" class="card panel" aria-labelledby="runs-title" hidden>
+      <div class="section-heading"><div><h2 id="runs-title">执行记录</h2></div></div>
       <div id="run-list"><p class="empty">暂无执行记录。</p></div>
     </section>
-    <footer>云端同步 · 仅限已登录的 WebUI 管理员<span>自动排除本插件的私有目录</span></footer>
   </main>
   <dialog id="task-dialog" aria-labelledby="task-dialog-title">
-    <form id="task-form">
-      <div class="dialog-heading"><div><p class="eyebrow">FILE SYNC</p><h2 id="task-dialog-title">新建同步任务</h2></div><button id="close-task" class="text-button" type="button" aria-label="关闭任务编辑">关闭</button></div>
-      <label class="field">任务名称<input id="task-name" maxlength="100" required placeholder="例如：插件数据同步"></label>
-      <label class="field">同步模式<select id="task-mode" required><option value="upload">上传更新 · 本机 → 云端</option><option value="upload_mirror">镜像到云端 · 本机 → 云端</option><option value="download">下载更新 · 云端 → 本机</option><option value="download_mirror">镜像到本地 · 云端 → 本机</option></select></label>
-      <p id="mode-description" class="notice small"></p>
-      <div class="field"><label id="local-path-label" for="task-local">本机来源（文件／目录）</label><input id="task-local" required spellcheck="false" placeholder="填写 AstrBot 所在机器上的一个路径"><div id="local-examples" class="example-row"><span class="muted small">快捷示例</span><button id="example-plugins" class="chip" type="button">插件数据目录</button><button id="example-backups" class="chip" type="button">AstrBot 导出目录</button></div><p class="muted small">相对路径基于 <code id="root-path"></code>；Docker 中填写容器内可见路径。</p></div>
-      <label class="field"><span id="remote-path-label">云端目标子目录</span><input id="task-remote" required maxlength="1024" spellcheck="false" placeholder="例如 plugin-data"><span class="muted small">相对上方同步根目录填写；上传目标不能重复或互相包含。下载来源须已存在。</span></label>
-      <p class="muted small destination">同步路径：<code id="task-destination"></code></p>
-      <label class="field">排除规则 <span class="muted small">可选，每行一个</span><textarea id="task-exclude" rows="2" spellcheck="false" placeholder="例如：*.tmp、cache/**"></textarea><span class="muted small">使用 rclone glob 规则；匹配项在两端均忽略，不参与传输或删除。</span></label>
-      <label class="field">执行间隔（分钟）<input id="task-interval" type="number" min="0" max="525600" step="1" value="0" required><span class="muted small">0 为仅手动；1440 为每 24 小时一次。</span></label>
-      <label class="checkbox-label"><input id="task-enabled" type="checkbox" checked>启用定时执行 <span class="muted small">手动同步始终可用</span></label>
-      <div id="preview-result" class="notice" role="status" hidden></div><div id="task-error" class="notice error" role="alert" hidden></div>
+    <form id="task-form" class="dialog-form">
+      <div class="dialog-heading"><div><h2 id="task-dialog-title">新建同步任务</h2></div><button id="close-task" class="text-button" type="button" aria-label="关闭任务编辑">关闭</button></div>
+      <div class="dialog-body">
+        <label class="field">任务名称<input id="task-name" maxlength="100" required placeholder="例如：插件数据同步"></label>
+        <label class="field">同步模式<select id="task-mode" required><option value="upload">上传更新 · 本机 → 云端</option><option value="upload_mirror">镜像到云端 · 本机 → 云端</option><option value="download">下载更新 · 云端 → 本机</option><option value="download_mirror">镜像到本地 · 云端 → 本机</option></select></label>
+        <p id="mode-description" class="notice"></p>
+        <div class="field"><label id="local-path-label" for="task-local">本机来源（文件／目录）</label><input id="task-local" required spellcheck="false" placeholder="填写 AstrBot 所在机器上的一个路径"><div id="local-examples" class="example-row"><button id="example-plugins" class="chip" type="button">插件数据目录</button><button id="example-backups" class="chip" type="button">AstrBot 导出目录</button></div></div>
+        <label class="field"><span id="remote-path-label">云端目标子目录</span><input id="task-remote" required maxlength="1024" spellcheck="false" placeholder="例如 plugin-data"></label>
+        <p class="destination"><code id="task-destination"></code></p>
+        <label class="field">排除规则（每行一条）<textarea id="task-exclude" rows="2" spellcheck="false" placeholder="*.tmp&#10;cache/**"></textarea></label>
+        <label class="field">执行间隔（分钟，0 为手动）<input id="task-interval" type="number" min="0" max="525600" step="1" value="0" required></label>
+        <label class="checkbox-label"><input id="task-enabled" type="checkbox" checked>启用定时执行</label>
+        <div id="preview-result" class="notice" role="status" hidden></div><div id="task-error" class="notice error" role="alert" hidden></div>
+      </div>
       <div class="dialog-actions"><button id="preview" class="button secondary" type="button">预览变更</button><button id="save-task" class="button primary" type="submit">保存任务</button></div>
     </form>
   </dialog>
   <dialog id="config-dialog" aria-labelledby="config-title">
-    <form id="config-form" autocomplete="off">
-      <div class="dialog-heading"><div><p class="eyebrow">RCLONE CONFIGURATION</p><h2 id="config-title">添加存储连接</h2></div><button id="close-config" class="text-button" type="button">取消</button></div>
-      <div id="config-basics"><div class="form-grid"><label class="field">连接名称<input id="config-name" maxlength="64" required pattern="[A-Za-z0-9_][A-Za-z0-9_-]{0,63}" placeholder="例如 backup"></label><label class="field">存储后端<select id="config-backend" required></select></label></div><p id="provider-description" class="muted small"></p><p class="notice small">OneDrive 的 client_id、client_secret 通常留空。</p><div id="config-fields"></div><details id="advanced-options"><summary>高级选项</summary><div id="config-advanced"></div></details></div>
-      <div id="config-question" hidden></div><div id="config-error" class="notice error" role="alert" hidden></div>
+    <form id="config-form" class="dialog-form" autocomplete="off">
+      <div class="dialog-heading"><div><h2 id="config-title">添加存储连接</h2></div><button id="close-config" class="text-button" type="button">取消</button></div>
+      <div class="dialog-body">
+        <div id="config-basics"><div class="form-grid"><label class="field">连接名称<input id="config-name" maxlength="64" required pattern="[A-Za-z0-9_][A-Za-z0-9_-]{0,63}" placeholder="例如 backup"></label><label class="field">存储后端<select id="config-backend" required></select></label></div><div id="config-fields"></div><details id="advanced-options"><summary>高级选项</summary><div id="config-advanced"></div></details></div>
+        <div id="config-question" hidden></div><div id="config-error" class="notice error" role="alert" hidden></div>
+      </div>
       <div class="dialog-actions"><button id="submit-config" class="button primary" type="submit">下一步</button></div>
     </form>
   </dialog>
   <dialog id="gui-dialog" aria-labelledby="gui-title">
-    <form id="gui-form" autocomplete="off">
-      <div class="dialog-heading"><div><p class="eyebrow">OFFICIAL RCLONE GUI</p><h2 id="gui-title">高级配置</h2></div><button id="close-gui" class="text-button" type="button">关闭面板</button></div>
-      <p class="muted">使用 rclone 自带的官方界面，直接管理同一份连接配置。服务运行期间暂停同步，15 分钟后自动停止；结束后重新检测连接。</p>
-      <div id="gui-settings"><label class="field">访问方式<select id="gui-listen"><option value="127.0.0.1">本机访问（仅监听 127.0.0.1）</option><option value="0.0.0.0">服务器 / Docker（监听所有网卡）</option></select></label><div class="form-grid"><label class="field">GUI 端口<input id="gui-port" type="number" min="1024" max="65535" value="5580" required></label><label class="field">API 端口<input id="api-port" type="number" min="1024" max="65535" value="5581" required></label></div><label class="field">浏览器可访问的 GUI 地址<input id="gui-url" type="url" value="http://127.0.0.1:5580" required></label><label class="field">浏览器可访问的 API 地址<input id="api-url" type="url" value="http://127.0.0.1:5581" required></label><p class="muted small">远程访问需要映射以上两个端口；公网请通过 HTTPS 反向代理访问，GUI 与 API 分别使用一个域名。服务使用随机密码认证。</p></div>
-      <div id="gui-result" hidden><label class="field">官方 GUI 登录地址<textarea id="gui-login" rows="3" readonly spellcheck="false"></textarea></label><p class="notice small">AstrBot 插件页面限制打开新窗口。请复制地址到浏览器打开；地址包含本次会话凭据，请勿分享。结束配置后该地址失效。</p><button id="copy-gui" class="button secondary" type="button">复制访问地址</button></div>
-      <div id="gui-error" class="notice error" role="alert" hidden></div><div class="dialog-actions"><button id="stop-gui" class="button secondary" type="button" hidden>结束配置并停止服务</button><button id="start-gui" class="button primary" type="submit">启动官方 GUI</button></div>
+    <form id="gui-form" class="dialog-form" autocomplete="off">
+      <div class="dialog-heading"><div><h2 id="gui-title">高级配置</h2></div><button id="close-gui" class="text-button" type="button">关闭面板</button></div>
+      <div class="dialog-body">
+        <p class="notice">配置期间暂停同步，15 分钟后自动停止。</p>
+        <div id="gui-settings"><label class="field">访问方式<select id="gui-listen"><option value="127.0.0.1">本机访问（仅监听 127.0.0.1）</option><option value="0.0.0.0">服务器 / Docker（监听所有网卡）</option></select></label><div class="form-grid"><label class="field">GUI 端口<input id="gui-port" type="number" min="1024" max="65535" value="5580" required></label><label class="field">API 端口<input id="api-port" type="number" min="1024" max="65535" value="5581" required></label></div><label class="field">浏览器可访问的 GUI 地址<input id="gui-url" type="url" value="http://127.0.0.1:5580" required></label><label class="field">浏览器可访问的 API 地址<input id="api-url" type="url" value="http://127.0.0.1:5581" required></label></div>
+        <div id="gui-result" hidden><label class="field">官方 GUI 登录地址<textarea id="gui-login" rows="3" readonly spellcheck="false"></textarea></label><p class="notice">复制地址到浏览器打开，请勿分享。</p><button id="copy-gui" class="button secondary" type="button">复制访问地址</button></div>
+        <div id="gui-error" class="notice error" role="alert" hidden></div>
+      </div>
+      <div class="dialog-actions"><button id="stop-gui" class="button secondary" type="button" hidden>结束配置并停止服务</button><button id="start-gui" class="button primary" type="submit">启动官方 GUI</button></div>
     </form>
   </dialog>
   <dialog id="confirmation" aria-labelledby="confirmation-title"><form method="dialog"><h2 id="confirmation-title">确认操作</h2><p id="confirmation-text"></p><div class="dialog-actions"><button class="button secondary" value="cancel">取消</button><button id="confirm-action" class="button primary" value="confirm">确认</button></div></form></dialog>

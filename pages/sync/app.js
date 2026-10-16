@@ -3,10 +3,10 @@
 const elements = Object.fromEntries([...document.querySelectorAll("[id]")].map(element => [element.id, element]));
 const labels = {queued: "排队中", checking: "检查来源", syncing: "同步中", completed: "已完成", failed: "失败", cancelled: "已取消", interrupted: "已中断"};
 const modes = {
-  upload: {label: "上传更新", upload: true, description: "以本机为准，向云端新增或更新文件，可能覆盖云端同名文件；保留云端多余文件。目录同步其内部内容，单文件保留原文件名。"},
-  upload_mirror: {label: "镜像到云端", upload: true, description: "以本机为准，覆盖有变化的云端同名文件，并删除云端多余文件。请使用专用云端目录；本机来源缺失时会停止。"},
-  download: {label: "下载更新", upload: false, description: "以云端为准，将云端目录的内容下载到本机接收目录，可能覆盖本机同名文件；保留本机多余文件。接收目录不存在时会在执行时创建。"},
-  download_mirror: {label: "镜像到本地", upload: false, description: "以云端为准，覆盖有变化的本机同名文件，并删除本机多余文件。请使用专用接收目录；云端来源缺失时会停止，云端目录存在且为空时会清理本地。"}
+  upload: {label: "上传更新", upload: true, description: "可能覆盖云端同名文件，保留多余文件。"},
+  upload_mirror: {label: "镜像到云端", upload: true, description: "可能覆盖云端同名文件，并删除云端多余文件。"},
+  download: {label: "下载更新", upload: false, description: "可能覆盖本机同名文件，保留多余文件。"},
+  download_mirror: {label: "镜像到本地", upload: false, description: "可能覆盖本机同名文件，并删除本机多余文件。"}
 };
 const activeStatuses = new Set(["queued", "checking", "syncing"]);
 let bridge, state, editingId = null, requesting = false;
@@ -58,7 +58,6 @@ async function loadState(passive = false) {
 function renderConnection() {
   const cloud = state.cloud;
   elements["connection-label"].textContent = cloud.connected ? "已连接" : cloud.error ? "连接待处理" : "未连接";
-  elements["connection-description"].textContent = cloud.connected ? `${state.connection.remote}:${state.connection.folder}` : "rclone · 多后端存储";
   elements["connection-dot"].classList.toggle("connected", cloud.connected);
   elements.connect.textContent = requesting ? "处理中…" : cloud.connected ? "重新检测" : "检测并连接";
   elements.connect.disabled = requesting || state.busy || ["rclone-binary", "rclone-remote", "remote-folder"].some(id => elements[id].dataset.dirty);
@@ -68,7 +67,6 @@ function renderConnection() {
   elements.disconnect.disabled = requesting || state.busy;
   elements["connection-error"].hidden = !cloud.error;
   elements["connection-error"].textContent = cloud.error || "";
-  elements["config-path"].textContent = state.config_path;
   elements["setup-command"].value = state.commands.setup;
   elements["reconnect-command"].value = state.commands.reconnect;
   renderConfiguration();
@@ -78,7 +76,7 @@ function renderTasks() {
   container.replaceChildren();
   if (!state.tasks.length) {
     const empty = node("div", "empty");
-    empty.append(node("strong", "", "选择方向，创建同步任务"), node("div", "", "选择上传或下载，并决定是否删除目标端的多余文件。"));
+    empty.append(node("strong", "", "选择方向，创建同步任务"));
     container.append(empty); return;
   }
   for (const task of state.tasks) {
@@ -89,9 +87,9 @@ function renderTasks() {
     description.append(title, node("div", "path-summary", mode.upload ? task.local_path : cloud), node("div", "path-summary", "→ " + (mode.upload ? cloud : task.local_path)));
     if (active?.status === "syncing") description.append(node("p", "run-detail", progressText(active.progress)));
     const schedule = node("div", "task-meta", task.enabled && task.interval_minutes ? `每 ${task.interval_minutes} 分钟` : "仅手动执行");
-    schedule.append(node("span", "", task.next_run ? `下次 ${date(task.next_run)}` : "按需同步"));
+    if (task.next_run) schedule.append(node("span", "", `下次 ${date(task.next_run)}`));
     const rules = node("div", "task-meta", mode.label);
-    rules.append(node("span", "", task.exclude.length ? `${task.exclude.length} 条排除规则` : "无自定义排除"));
+    if (task.exclude.length) rules.append(node("span", "", `${task.exclude.length} 条排除规则`));
     const actions = node("div", "actions");
     const run = node("button", "button secondary", active ? "取消同步" : "立即同步");
     run.disabled = requesting || !active && (!state.cloud.connected || state.configuration.active || state.busy && !state.runs.some(item => activeStatuses.has(item.status)));
@@ -109,7 +107,7 @@ function renderTasks() {
 function renderRuns() {
   const container = elements["run-list"];
   container.replaceChildren();
-  if (!state.runs.length) { container.append(node("p", "empty", "执行任务后，这里会显示进度和结果。")); return; }
+  if (!state.runs.length) { container.append(node("p", "empty", "暂无执行记录")); return; }
   for (const run of state.runs) {
     const item = node("article", "run-item"), top = node("div", "run-top"), title = node("div", "task-title");
     title.append(node("h3", "", run.task_name), node("span", "pill " + run.status, labels[run.status]));
@@ -129,11 +127,9 @@ function render() {
   elements["task-count"].textContent = state.tasks.length;
   const active = state.runs.find(run => ["checking", "syncing"].includes(run.status)) || state.runs.find(run => run.status === "queued");
   elements["activity-label"].textContent = active ? labels[active.status] : "空闲";
-  elements["activity-description"].textContent = active ? active.task_name : state.runs[0] ? "最近执行 " + date(state.runs[0].created_at) : "任务依次执行";
   elements["new-task"].disabled = requesting; elements.refresh.disabled = requesting;
   elements["save-task"].disabled = requesting;
   elements.preview.disabled = requesting || state.busy || !state.cloud.connected || state.configuration.active;
-  elements["root-path"].textContent = state.root;
   for (const id of ["task-mode", "task-name", "task-local", "task-remote", "task-exclude", "task-interval", "task-enabled"]) elements[id].disabled = requesting;
   renderDestination();
 }
@@ -186,7 +182,6 @@ function renderPreview(preview) {
     box.append(list);
   }
   if (preview.truncated) box.append(node("p", "muted small", "仅展示前 200 项变更。"));
-  box.append(node("p", "muted small", "预览未修改两端文件；实际执行会根据当时的文件状态重新比较。"));
   box.hidden = false;
 }
 function bindEvents() {

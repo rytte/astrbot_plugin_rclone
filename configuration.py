@@ -311,7 +311,22 @@ class Configuration:
                 ):
                     await self._close()
 
-    async def begin(self, owner: str, payload: dict) -> dict:
+    async def reconnect(self, owner: str, name: str) -> dict:
+        name = remote_name(name)
+        remote = next(
+            (item for item in await self.remotes() if item["name"] == name), None
+        )
+        if remote is None:
+            raise SyncError("当前连接尚未配置，请先添加存储连接。")
+        return await self.begin(
+            owner,
+            {"name": name, "backend": remote["type"], "parameters": {}, "edit": True},
+            reconnect=True,
+        )
+
+    async def begin(
+        self, owner: str, payload: dict, *, reconnect: bool = False
+    ) -> dict:
         check_keys(
             payload,
             {"name", "backend", "parameters", "edit"},
@@ -351,7 +366,7 @@ class Configuration:
             # Keep OAuth interactive questions in this page; never open a browser on the server.
             parameters = {**parameters, "config_is_local": "false"}
             if payload["edit"]:
-                parameters["config_refresh_token"] = "false"
+                parameters["config_refresh_token"] = "true" if reconnect else "false"
             try:
                 result = await self.process.rpc(
                     "config/update" if payload["edit"] else "config/create",
@@ -381,6 +396,9 @@ class Configuration:
                 "name": self.session["remote"],
             }
         option = result.get("Option")
+        # rclone returns ConfigError without repeating the current question.
+        if result.get("Error") and option is None:
+            option = self.session.get("option")
         if not isinstance(option, dict) or not isinstance(option.get("Name"), str):
             raise SyncError("此配置步骤无法在页面展示，请取消并使用官方 GUI。")
         self.session["option"] = option
