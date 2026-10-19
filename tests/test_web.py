@@ -24,7 +24,13 @@ async def page_plugin(tmp_path, monkeypatch, request):
     monkeypatch.setattr(main.StarTools, "get_data_dir", lambda _: tmp_path / "private")
     config_path = tmp_path / "astrbot_plugin_rclone_config.json"
     config_path.write_text(
-        json.dumps({"logo": getattr(request, "param", "logo.png")}), encoding="utf-8"
+        json.dumps(
+            {
+                "logo": getattr(request, "param", "logo.png"),
+                "enable_model_tools": False,
+            }
+        ),
+        encoding="utf-8",
     )
     schema = json.loads(
         (Path(__file__).resolve().parents[1] / "_conf_schema.json").read_text(
